@@ -9,6 +9,7 @@ package sbom
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/simplelru"
@@ -139,6 +141,135 @@ func TestEvictedSBOMReleasesPendingFileEvents(t *testing.T) {
 	}
 }
 
+func newScanQueueResolver(t *testing.T) (*Resolver, *SBOM) {
+	t.Helper()
+	r := newPendingFileEventsResolver(t)
+	sboms, err := simplelru.NewLRU(10, r.onSBOMEvicted)
+	if err != nil {
+		t.Fatalf("NewLRU: %v", err)
+	}
+	r.sboms = sboms
+	r.scanChan = make(chan *SBOM, 1)
+
+	sbom := NewSBOM("container-id", nil, "image:tag")
+	t.Cleanup(sbom.stop)
+	sboms.Add(sbom.ContainerID, sbom)
+	if !r.addPendingScan(sbom.ContainerID) {
+		t.Fatalf("addPendingScan failed")
+	}
+	return r, sbom
+}
+
+// TestScanFailedRetriesScan checks that a workload whose scan failed is queued
+// for a scan again. It held its scan slot and waited for good.
+func TestScanFailedRetriesScan(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sbom := newScanQueueResolver(t)
+
+		r.scanFailed(sbom, errors.New("scan failed"))
+		time.Sleep(failedScanRetryDelay)
+		synctest.Wait()
+
+		select {
+		case queued := <-r.scanChan:
+			if queued != sbom {
+				t.Errorf("queued unexpected SBOM for a scan")
+			}
+		default:
+			t.Fatalf("the workload was not queued for a scan again")
+		}
+	})
+}
+
+// TestScanFailedSpacesOutRetries checks that the retries of a workload whose scan
+// keeps failing wait twice as long each time.
+func TestScanFailedSpacesOutRetries(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sbom := newScanQueueResolver(t)
+
+		for _, delay := range []time.Duration{failedScanRetryDelay, 2 * failedScanRetryDelay, 4 * failedScanRetryDelay} {
+			r.scanFailed(sbom, errors.New("scan failed"))
+			time.Sleep(delay - time.Second)
+			synctest.Wait()
+			if len(r.scanChan) != 0 {
+				t.Fatalf("the workload was queued again before %s", delay)
+			}
+			time.Sleep(time.Second)
+			synctest.Wait()
+			if len(r.scanChan) != 1 {
+				t.Fatalf("the workload was not queued again after %s", delay)
+			}
+			<-r.scanChan
+		}
+	})
+}
+
+// TestRetryScanSkipsQueuedWorkload checks that a retry finding the workload queued
+// again, as a refresh queues it, leaves it there.
+func TestRetryScanSkipsQueuedWorkload(t *testing.T) {
+	r, sbom := newScanQueueResolver(t)
+
+	r.retryScan(sbom)
+
+	if current, ok := r.sboms.Peek(sbom.ContainerID); !ok || current != sbom {
+		t.Fatalf("the retry dropped the queued workload")
+	}
+	if len(r.pendingScan) != 1 || len(r.scanChan) != 0 {
+		t.Errorf("%d pending scans, %d queued, want the one pending scan", len(r.pendingScan), len(r.scanChan))
+	}
+}
+
+// TestScanFailedReleasesGoneWorkload checks that a workload whose processes are
+// gone releases its scan slot and leaves the scan queue.
+func TestScanFailedReleasesGoneWorkload(t *testing.T) {
+	for _, err := range []error{errNoProcessForContainerID, errNoContainerRoot} {
+		t.Run(err.Error(), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				r, sbom := newScanQueueResolver(t)
+
+				r.scanFailed(sbom, err)
+				time.Sleep(failedScanRetryDelay)
+				synctest.Wait()
+
+				if len(r.pendingScan) != 0 || len(r.scanChan) != 0 {
+					t.Errorf("%d pending scans, %d queued, want none", len(r.pendingScan), len(r.scanChan))
+				}
+			})
+		})
+	}
+}
+
+// TestTriggerScanRetriesOnFullChan checks that a workload meeting a scan chan
+// full of stopped SBOMs is queued again later, rather than dropped.
+func TestTriggerScanRetriesOnFullChan(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sbom := newScanQueueResolver(t)
+		r.removePendingScan(sbom.ContainerID)
+		stopped := NewSBOM("stopped-container-id", nil, "image:tag")
+		stopped.stop()
+		r.scanChan <- stopped
+
+		sbom.Lock()
+		r.triggerScan(sbom)
+		sbom.Unlock()
+		if current, ok := r.sboms.Peek(sbom.ContainerID); !ok || current != sbom {
+			t.Fatalf("the workload was dropped on a full scan chan")
+		}
+
+		<-r.scanChan
+		time.Sleep(failedScanRetryDelay)
+		synctest.Wait()
+		select {
+		case queued := <-r.scanChan:
+			if queued != sbom {
+				t.Errorf("queued unexpected SBOM for a scan")
+			}
+		default:
+			t.Fatalf("the workload was not queued again")
+		}
+	})
+}
+
 // TestTriggerScanQueuesEveryWorkload checks that every SBOM entry the resolver
 // holds can wait for its scan, as at a start on a host of many containers.
 func TestTriggerScanQueuesEveryWorkload(t *testing.T) {
@@ -193,10 +324,14 @@ func TestAnalyzeWorkloadReusesCachedDataAsComputed(t *testing.T) {
 
 	sbom := NewSBOM("container-id", nil, "image:tag")
 	t.Cleanup(sbom.stop)
+	sbom.failedScans = 2
 	r.queuePendingFileEvent("container-id", "/usr/bin/su", 04755, 0)
 
 	if err := r.analyzeWorkload(sbom); err != nil {
 		t.Fatalf("analyzeWorkload: %v", err)
+	}
+	if sbom.failedScans != 0 {
+		t.Errorf("%d failed scans after the workload took the cached data, want 0", sbom.failedScans)
 	}
 
 	if !sbom.IsComputed() {
