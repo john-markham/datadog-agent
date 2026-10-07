@@ -10,6 +10,7 @@ package sbomcollector
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -26,6 +27,8 @@ import (
 	workloadmeta "github.com/DataDog/datadog-agent/comp/core/workloadmeta/def"
 	workloadmetafxmock "github.com/DataDog/datadog-agent/comp/core/workloadmeta/fx-mock"
 	workloadmetamock "github.com/DataDog/datadog-agent/comp/core/workloadmeta/mock"
+	configmock "github.com/DataDog/datadog-agent/pkg/config/mock"
+	"github.com/DataDog/datadog-agent/pkg/config/model"
 	sbompb "github.com/DataDog/datadog-agent/pkg/proto/pbgo/sbom"
 	sbompkg "github.com/DataDog/datadog-agent/pkg/sbom"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
@@ -583,4 +586,24 @@ func TestForgetRemovedImages(t *testing.T) {
 	}
 	_, err := store.GetImage(image.ID)
 	assert.Error(t, err)
+}
+
+// TestIsEnabled checks that the collector follows sbom.enrichment.usage.enabled
+// alone, as system-probe does when it starts its usage consumer.
+func TestIsEnabled(t *testing.T) {
+	for _, usage := range []bool{false, true} {
+		for _, sbom := range []string{"unset", "true", "false"} {
+			t.Run(fmt.Sprintf("usage %v sbom %s", usage, sbom), func(t *testing.T) {
+				agentConfig := configmock.New(t)
+				agentConfig.Set("sbom.enrichment.usage.enabled", usage, model.SourceFile)
+				systemProbeConfig := configmock.NewSystemProbe(t)
+				if sbom != "unset" {
+					systemProbeConfig.Set("runtime_security_config.sbom.enabled", sbom == "true", model.SourceFile)
+				}
+
+				handler := &streamHandler{agentConfig: agentConfig, systemProbeConfig: systemProbeConfig}
+				assert.Equal(t, usage, handler.IsEnabled())
+			})
+		}
+	}
 }
