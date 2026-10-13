@@ -636,8 +636,12 @@ func (s *sbomTargetsSuite[Env]) logSBOMInventory() {
 	})
 }
 
+// hostScanTimeout is the default sbom.host.scan_timeout.
+const hostScanTimeout = 10 * time.Minute
+
 // TestHostSBOM verifies the host (RHEL 10) SBOM: it is the OS itself (not an
-// image), lists meaningful rpm packages, and carries no layer/DiffID metadata.
+// image), lists meaningful rpm packages, carries no layer/DiffID metadata, and
+// comes from a scan that finished within its timeout.
 func (s *sbomTargetsSuite[Env]) TestHostSBOM() {
 	s.EventuallyWithTf(func(collect *assert.CollectT) {
 		c := &myCollectT{CollectT: collect, errors: []error{}}
@@ -690,10 +694,16 @@ func (s *sbomTargetsSuite[Env]) TestHostSBOM() {
 			// languages is enabled on the host too, but a minimal RHEL host has no
 			// language packages to surface: its Go binaries (kubelet, containerd, ...)
 			// are owned by rpm packages, so the deferred analyzers skip them, and the
-			// flannel CNI plugin only appears as a container SBOM. The value here is
-			// that the scan completes (SUCCESS above) without timing out, which the
-			// trivy deferral fix makes possible. Log the count; don't assert a floor.
+			// flannel CNI plugin only appears as a container SBOM. Log the count.
+			// Don't assert a floor.
 			s.T().Logf("SBOM-COUNT[host] components=%d application=%d", len(comps), len(applicationComponents(comps)))
+
+			// The value here is that the scan completes within its timeout, which
+			// the trivy deferral fix makes possible. A scan that runs out of time
+			// falls back to the OS packages alone and reports SUCCESS too, after
+			// running the whole timeout, so check how long the scan ran.
+			took := p.GetGenerationDuration().AsDuration()
+			assert.Lessf(c, took, hostScanTimeout, "host scan took %s, past its %s timeout: it fell back to the OS packages", took, hostScanTimeout)
 
 			// A host SBOM must not look like a container image.
 			assert.Emptyf(c, p.GetDdTags(), "host SBOM should carry no image dd tags")

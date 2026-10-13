@@ -63,8 +63,10 @@ func imageOpener(ctx context.Context, collector, ref string, f *os.File, imageSa
 // image wraps github.com/google/go-containerregistry/pkg/v1/daemon.Image,
 // which loads the whole image into memory up front. The wrapper answers the
 // image ID and, in most cases, the config file from ImageInspect, and exports
-// the image the first time Trivy reads a layer or the raw config. Each scan
-// starts with an empty cache, so it reads the layers and exports the image once.
+// the image the first time Trivy reads a layer or the raw config. Each Trivy
+// scan starts with an empty cache and reads every layer. The image is exported
+// once, so the OS rescan after an application scan runs out of time reads the
+// layers from the same export.
 type image struct {
 	v1.Image
 	name    string
