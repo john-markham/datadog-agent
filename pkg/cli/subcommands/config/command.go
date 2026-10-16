@@ -137,7 +137,7 @@ func MakeCommand(globalParamsGetter func() GlobalParams) *cobra.Command {
 }
 
 func printAgentSchema() error {
-	s, err := schema.GetCoreSchema()
+	s, err := schema.GetRawSchema(schema.CoreSchema)
 	if err != nil {
 		fmt.Printf("Error: %s", err)
 	} else {
@@ -147,7 +147,7 @@ func printAgentSchema() error {
 }
 
 func printSystemProbeSchema() error {
-	s, err := schema.GetSystemProbeSchema()
+	s, err := schema.GetRawSchema(schema.SystemProbeShema)
 	if err != nil {
 		fmt.Printf("Error: %s", err)
 	} else {

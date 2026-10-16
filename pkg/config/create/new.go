@@ -7,13 +7,16 @@
 package create
 
 import (
-	"strings"
-
 	"github.com/DataDog/datadog-agent/pkg/config/model"
 	"github.com/DataDog/datadog-agent/pkg/config/nodetreemodel"
+	"github.com/DataDog/datadog-agent/pkg/config/schema"
 )
 
 // NewConfig returns a config with the given name.
 func NewConfig(name string) model.BuildableConfig {
-	return nodetreemodel.NewNodeTreeConfig(name, "DD", strings.NewReplacer(".", "_")) // nolint: forbidigo // legit use case
+	schemaID := schema.CoreSchema
+	if name == "system-probe" {
+		schemaID = schema.SystemProbeShema
+	}
+	return nodetreemodel.NewNodeTreeConfig(name, schemaID) // nolint: forbidigo // legit use case
 }

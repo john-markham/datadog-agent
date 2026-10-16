@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/DataDog/datadog-agent/pkg/config/model"
+	"github.com/DataDog/datadog-agent/pkg/config/schema"
 )
 
 var (
@@ -109,7 +110,7 @@ func (c *ntmConfig) findUnknownEnvVars(environ []string) {
 	knownEnvVarsMu.RLock()
 	defer knownEnvVarsMu.RUnlock()
 
-	if c.configName == "system-probe" {
+	if c.schemaID != schema.CoreSchema {
 		// we don't want to validate env vars multiple times since it's the same for all instances of
 		// nodetreemodel.
 		return

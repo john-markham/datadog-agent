@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/config/model",
         "//pkg/config/nodetreemodel",
+        "//pkg/config/schema",
     ],
 )
 
@@ -18,6 +19,7 @@ dd_agent_go_test(
     embed = [":create"],
     deps = [
         "//pkg/config/nodetreemodel",
+        "//pkg/config/schema",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

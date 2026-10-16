@@ -23,6 +23,7 @@ dd_agent_go_test(
         "//pkg/config/create",
         "//pkg/config/model",
         "//pkg/config/nodetreemodel",
+        "//pkg/config/schema",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

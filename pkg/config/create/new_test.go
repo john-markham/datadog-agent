@@ -12,11 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/DataDog/datadog-agent/pkg/config/nodetreemodel"
+	"github.com/DataDog/datadog-agent/pkg/config/schema"
 )
 
 func TestNewConfig(t *testing.T) {
 	cfg := NewConfig("test")
 	require.NotNil(t, cfg)
 	// NewConfig always returns the nodetreemodel implementation.
-	assert.IsType(t, nodetreemodel.NewNodeTreeConfig("test", "DD", nil), cfg)
+	assert.IsType(t, nodetreemodel.NewNodeTreeConfig("test", schema.CoreSchema), cfg)
 }

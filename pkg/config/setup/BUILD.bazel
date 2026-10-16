@@ -98,6 +98,7 @@ dd_agent_go_test(
         "//comp/core/secrets/mock",
         "//pkg/config/model",
         "//pkg/config/nodetreemodel",
+        "//pkg/config/schema",
         "//pkg/config/setup/constants",
         "//pkg/util/defaultpaths",
         "//pkg/util/scrubber",

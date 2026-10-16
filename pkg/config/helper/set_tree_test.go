@@ -7,17 +7,17 @@ package helper
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/DataDog/datadog-agent/pkg/config/model"
 	"github.com/DataDog/datadog-agent/pkg/config/nodetreemodel"
+	"github.com/DataDog/datadog-agent/pkg/config/schema"
 )
 
 func constructNtmConfig(content string, setupFunc func(model.Setup)) model.BuildableConfig {
-	conf := nodetreemodel.NewNodeTreeConfig("datadog", "DD", strings.NewReplacer(".", "_")) // nolint: forbidigo // legit use case
+	conf := nodetreemodel.NewNodeTreeConfig("datadog", schema.CoreSchema) // nolint: forbidigo // legit use case
 
 	if setupFunc != nil {
 		setupFunc(conf)

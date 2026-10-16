@@ -17,6 +17,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/config/create"
 	"github.com/DataDog/datadog-agent/pkg/config/model"
 	"github.com/DataDog/datadog-agent/pkg/config/nodetreemodel"
+	"github.com/DataDog/datadog-agent/pkg/config/schema"
 )
 
 // Struct that is used within the config
@@ -1468,7 +1469,8 @@ network_devices:
 }
 
 func TestUnmarshalKeyFromComplexMapValue(t *testing.T) {
-	cfg := nodetreemodel.NewNodeTreeConfig("test", "", nil)
+	cfg := nodetreemodel.NewNodeTreeConfig("test", schema.CoreSchema)
+	cfg.SetEnvPrefix("")
 	cfg.BindEnvAndSetDefault("kubernetes_node_annotations_as_tags", map[string]string{"cluster.k8s.io/machine": "kube_machine"})
 	cfg.BuildSchema()
 
@@ -1479,7 +1481,8 @@ func TestUnmarshalKeyFromComplexMapValue(t *testing.T) {
 }
 
 func TestUnmarshalKeyComplexMapValueFromYAML(t *testing.T) {
-	cfg := nodetreemodel.NewNodeTreeConfig("test", "", nil)
+	cfg := nodetreemodel.NewNodeTreeConfig("test", schema.CoreSchema)
+	cfg.SetEnvPrefix("")
 	cfg.SetConfigType("yaml")
 	cfg.BindEnvAndSetDefault("kubernetes_node_annotations_as_tags", map[string]string{"cluster.k8s.io/machine": "kube_machine"})
 	cfg.BuildSchema()

@@ -14,16 +14,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/DataDog/datadog-agent/pkg/config/model"
+	"github.com/DataDog/datadog-agent/pkg/config/schema"
 )
 
 func TestUnknownEnvVars(t *testing.T) {
-	cfg := NewNodeTreeConfig("datadog", "DD", nil)
+	cfg := NewNodeTreeConfig("datadog", schema.CoreSchema)
 	cfg.BindEnvAndSetDefault("unknown_env_test.api_key", "")
 	cfg.BindEnvAndSetDefault("unknown_env_test.custom", "", "DD_UNKNOWN_ENV_TEST_CUSTOM_NAME")
 	cfg.BuildSchema()
 
 	// env vars bound by another config instance are known too
-	other := NewNodeTreeConfig("system-probe", "DD", nil)
+	other := NewNodeTreeConfig("system-probe", schema.SystemProbeShema)
 	other.BindEnvAndSetDefault("unknown_env_test.system_probe_setting", "")
 	other.BuildSchema()
 
@@ -48,7 +49,7 @@ func TestUnknownEnvVars(t *testing.T) {
 			if tc.unknown {
 				expected = []string{"Unknown environment variable: " + tc.envVar}
 			}
-			c := &ntmConfig{}
+			c := &ntmConfig{schemaID: schema.CoreSchema}
 			c.findUnknownEnvVars([]string{tc.envVar + "=foo"})
 			assert.Equal(t, expected, c.warnings)
 		})
@@ -58,7 +59,7 @@ func TestUnknownEnvVars(t *testing.T) {
 func TestValidateReportsUnknownEnvVars(t *testing.T) {
 	t.Setenv("DD_UNKNOWN_ENV_TEST_VALIDATE", "foo")
 
-	cfg := NewNodeTreeConfig("datadog", "DD", nil)
+	cfg := NewNodeTreeConfig("datadog", schema.CoreSchema)
 	cfg.BuildSchema()
 	cfg.(*ntmConfig).Validate()
 
@@ -133,7 +134,7 @@ func TestVariousCodepoints(t *testing.T) {
 }
 
 func newUnicodeTestConfig(t *testing.T, yamlConfig string) *ntmConfig {
-	cfg := NewNodeTreeConfig("datadog", "DD", nil)
+	cfg := NewNodeTreeConfig("datadog", schema.CoreSchema)
 	cfg.SetDefault("api_key", "")
 	cfg.SetDefault("root_element.nestedKey", "")
 	cfg.SetDefault("runtime_security_config.activity_dump.remote_storage.endpoints.logs_dd_url", "")

@@ -7,7 +7,6 @@ package structure
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,10 +15,11 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/config/model"
 	"github.com/DataDog/datadog-agent/pkg/config/nodetreemodel"
+	"github.com/DataDog/datadog-agent/pkg/config/schema"
 )
 
 func constructNtmConfig(content string, dynamicSchema bool, setupFunc func(model.Setup)) model.Config {
-	conf := nodetreemodel.NewNodeTreeConfig("datadog", "DD", strings.NewReplacer(".", "_")) // nolint: forbidigo // legit use case
+	conf := nodetreemodel.NewNodeTreeConfig("datadog", schema.CoreSchema) // nolint: forbidigo // legit use case
 
 	if dynamicSchema {
 		conf.SetTestOnlyDynamicSchema(true)
