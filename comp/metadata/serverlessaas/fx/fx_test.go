@@ -22,6 +22,7 @@ import (
 	logmock "github.com/DataDog/datadog-agent/comp/core/log/mock"
 	"github.com/DataDog/datadog-agent/comp/metadata/inventorypayload"
 	runner "github.com/DataDog/datadog-agent/comp/metadata/runner/def"
+	runnerfx "github.com/DataDog/datadog-agent/comp/metadata/runner/fx"
 	"github.com/DataDog/datadog-agent/pkg/serializer"
 	"github.com/DataDog/datadog-agent/pkg/serializer/marshaler"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
@@ -53,21 +54,20 @@ func (fakeHostname) GetWithProvider(context.Context) (hostnameinterface.Data, er
 	return hostnameinterface.Data{}, nil
 }
 
-func TestScopedRunner(t *testing.T) {
+func TestRunnerHonorsConfiguration(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
-		flag       string
+		metadata   bool
 		inventory  bool
 		identity   bool
 		wantReport bool
 	}{
-		{"extension defaults", "1", true, true, true},
-		{"flag off", "0", true, true, false},
-		{"inventory disabled", "1", false, true, false},
-		{"missing identity", "1", true, false, false},
+		{"metadata enabled", true, true, true, true},
+		{"extension defaults", false, true, true, false},
+		{"inventory disabled", true, false, true, false},
+		{"missing identity", true, true, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("DD_SERVERLESS_AAS_EXTENSION_INVENTORY_ENABLED", tc.flag)
 			t.Setenv("WEBSITE_SITE_NAME", "")
 			if tc.identity {
 				t.Setenv("WEBSITE_SITE_NAME", "test-app")
@@ -76,7 +76,7 @@ func TestScopedRunner(t *testing.T) {
 			t.Setenv("WEBSITE_RESOURCE_GROUP", "test-rg")
 			synctest.Test(t, func(t *testing.T) {
 				conf := config.NewMockWithOverrides(t, map[string]any{
-					"enable_metadata_collection":        false,
+					"enable_metadata_collection":        tc.metadata,
 					"inventories_enabled":               tc.inventory,
 					"inventories_configuration_enabled": false,
 					"inventories_first_run_delay":       3600,
@@ -93,6 +93,7 @@ func TestScopedRunner(t *testing.T) {
 					fx.Provide(func() hostnameinterface.Component { return fakeHostname{} }),
 					fx.Provide(func() serializer.MetricSerializer { return s }),
 					Module(),
+					runnerfx.Module(),
 					fx.Populate(&rootConfig),
 					fx.Invoke(func(_ runner.Component) {}),
 					fx.Invoke(func(in struct {
@@ -100,7 +101,7 @@ func TestScopedRunner(t *testing.T) {
 						Providers []runner.MetadataProvider `group:"metadata_provider"`
 					}) {
 						expected := 0
-						if tc.flag == "1" && tc.inventory {
+						if tc.metadata && tc.inventory {
 							expected = 1
 						}
 						require.Len(t, runner.GetAndFilterProviders(in.Providers), expected)
@@ -110,7 +111,7 @@ func TestScopedRunner(t *testing.T) {
 				require.Empty(t, s.snapshot(), "construction must not submit")
 				require.NoError(t, app.Start(t.Context()))
 				synctest.Wait()
-				require.False(t, rootConfig.GetBool("enable_metadata_collection"), "the override must not escape the AAS scope")
+				require.Equal(t, tc.metadata, rootConfig.GetBool("enable_metadata_collection"), "the component must not override configuration")
 				require.Equal(t, tc.inventory, rootConfig.GetBool("inventories_enabled"))
 				if tc.wantReport {
 					payloads := s.snapshot()

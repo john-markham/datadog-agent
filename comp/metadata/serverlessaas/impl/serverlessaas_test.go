@@ -78,21 +78,19 @@ func newTestComponent(t *testing.T, conf config.Component) (Provides, *recording
 	return provides, serializer
 }
 
-func TestScopedInventoryGate(t *testing.T) {
+func TestComponentUsesInventoryConfiguration(t *testing.T) {
 	aasEnv(t)
+	// The binary selects the AAS module. The component uses configuration,
+	// rather than independently reading the binary's feature flag again.
+	t.Setenv("DD_SERVERLESS_AAS_EXTENSION_INVENTORY_ENABLED", "0")
 	conf := enabledConfig(t)
 	provides, serializer := newTestComponent(t, conf)
 
-	assert.Nil(t, provides.Provider.Callback)
-	assert.Empty(t, serializer.payloads)
-
-	t.Setenv(envInventoryEnabled, "1")
-	provides, _ = newTestComponent(t, conf)
 	assert.NotNil(t, provides.Provider.Callback)
+	assert.Empty(t, serializer.payloads)
 }
 
 func TestGlobalInventoryGatesAreRespected(t *testing.T) {
-	t.Setenv(envInventoryEnabled, "1")
 	aasEnv(t)
 	for _, key := range []string{"enable_metadata_collection", "inventories_enabled"} {
 		t.Run(key, func(t *testing.T) {
@@ -106,8 +104,7 @@ func TestGlobalInventoryGatesAreRespected(t *testing.T) {
 	}
 }
 
-func TestConstructorDoesNotCollectMetadata(t *testing.T) {
-	t.Setenv(envInventoryEnabled, "1")
+func TestConstructorDoesNotCollectHostname(t *testing.T) {
 	aasEnv(t)
 
 	assert.NotPanics(t, func() {
@@ -121,7 +118,6 @@ func TestConstructorDoesNotCollectMetadata(t *testing.T) {
 }
 
 func TestFirstCompletePayloadIsImmediate(t *testing.T) {
-	t.Setenv(envInventoryEnabled, "1")
 	t.Setenv("DD_AAS_DOTNET_EXTENSION_VERSION", "3.12.0")
 	t.Setenv("DD_SERVICE", "checkout")
 	t.Setenv("DD_VERSION", "2026.10")
@@ -159,7 +155,7 @@ func TestFirstCompletePayloadIsImmediate(t *testing.T) {
 }
 
 func TestPayloadIsWithheldWithoutResourceID(t *testing.T) {
-	t.Setenv(envInventoryEnabled, "1")
+	t.Setenv("WEBSITE_SITE_NAME", "")
 	provides, serializer := newTestComponent(t, enabledConfig(t))
 
 	provides.Provider.Callback(t.Context())
@@ -168,7 +164,6 @@ func TestPayloadIsWithheldWithoutResourceID(t *testing.T) {
 }
 
 func TestSuccessfulSubmissionChangesReportReason(t *testing.T) {
-	t.Setenv(envInventoryEnabled, "1")
 	aasEnv(t)
 	provides, serializer := newTestComponent(t, enabledConfig(t))
 	component := provides.Comp.(*serverlessAASComp)
@@ -182,6 +177,20 @@ func TestSuccessfulSubmissionChangesReportReason(t *testing.T) {
 	provides.Provider.Callback(t.Context())
 	require.Len(t, serializer.payloads, 2)
 	assert.Equal(t, reportReasonPeriodic, serializer.payloads[1].Metadata["report_reason"])
+	assert.Equal(t, reportReasonStartup, serializer.payloads[0].Metadata["report_reason"], "later collections must not mutate queued payloads")
+}
+
+func TestStaticFieldsAreCollectedOnce(t *testing.T) {
+	aasEnv(t)
+	provides, serializer := newTestComponent(t, enabledConfig(t))
+	t.Setenv("WEBSITE_SITE_NAME", "changed-after-construction")
+	t.Setenv("REGION_NAME", "changed-after-construction")
+
+	provides.Provider.Callback(t.Context())
+
+	require.Len(t, serializer.payloads, 1)
+	assert.Equal(t, "My-App", serializer.payloads[0].Metadata["resource_name"])
+	assert.Equal(t, "East US", serializer.payloads[0].Metadata["region"])
 }
 
 func TestBuildFieldsFunctionAppAndSlot(t *testing.T) {
@@ -189,7 +198,7 @@ func TestBuildFieldsFunctionAppAndSlot(t *testing.T) {
 	t.Setenv("WEBSITE_SLOT_NAME", "Staging")
 	aasEnv(t)
 
-	fields := buildFields(enabledConfig(t))
+	fields := buildFields()
 
 	require.NotNil(t, fields)
 	assert.Equal(t, workloadTypeAzureFunction, fields["workload_type"])
@@ -211,7 +220,7 @@ func TestProductionSlotIsOmitted(t *testing.T) {
 	t.Setenv("WEBSITE_SLOT_NAME", "Production")
 	aasEnv(t)
 
-	fields := buildFields(enabledConfig(t))
+	fields := buildFields()
 
 	require.NotNil(t, fields)
 	assert.Equal(

@@ -10,7 +10,6 @@ go_library(
         "//comp/core/config",
         "//comp/core/hostname/hostnameinterface/def",
         "//comp/core/log/def",
-        "//comp/def",
         "//comp/metadata/internal/util",
         "//comp/metadata/inventorypayload",
         "//comp/metadata/runner/def",

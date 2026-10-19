@@ -7,29 +7,13 @@
 package fx
 
 import (
-	"go.uber.org/fx"
-
-	"github.com/DataDog/datadog-agent/comp/core/config"
-	runnerfx "github.com/DataDog/datadog-agent/comp/metadata/runner/fx"
 	serverlessaasimpl "github.com/DataDog/datadog-agent/comp/metadata/serverlessaas/impl"
 	"github.com/DataDog/datadog-agent/pkg/util/fxutil"
 )
 
-// Module enables only AAS inventory and its runner within this Fx scope. The
-// extension's global metadata setting remains disabled for host collectors.
+// Module registers the AAS inventory implementation. The binary selects the runner.
 func Module() fxutil.Module {
 	return fxutil.Component(
-		fx.Decorate(func(conf config.Component) config.Component { return inventoryConfig{conf} }),
-		runnerfx.Module(),
 		fxutil.ProvideComponentConstructor(serverlessaasimpl.NewComponent),
 	)
-}
-
-type inventoryConfig struct{ config.Component }
-
-func (c inventoryConfig) GetBool(key string) bool {
-	if key == "enable_metadata_collection" {
-		return true
-	}
-	return c.Component.GetBool(key)
 }

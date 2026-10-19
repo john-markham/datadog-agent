@@ -48,13 +48,18 @@ import (
 	orchestratordef "github.com/DataDog/datadog-agent/comp/forwarder/orchestrator/def"
 	orchestratorForwarderFx "github.com/DataDog/datadog-agent/comp/forwarder/orchestrator/fx"
 	haagentfx "github.com/DataDog/datadog-agent/comp/haagent/fx"
+	host "github.com/DataDog/datadog-agent/comp/metadata/host/def"
 	hostfx "github.com/DataDog/datadog-agent/comp/metadata/host/fx"
+	inventoryagent "github.com/DataDog/datadog-agent/comp/metadata/inventoryagent/def"
 	inventoryagentfx "github.com/DataDog/datadog-agent/comp/metadata/inventoryagent/fx"
+	inventoryhost "github.com/DataDog/datadog-agent/comp/metadata/inventoryhost/def"
 	inventoryhostfx "github.com/DataDog/datadog-agent/comp/metadata/inventoryhost/fx"
+	resources "github.com/DataDog/datadog-agent/comp/metadata/resources/def"
 	resourcesfx "github.com/DataDog/datadog-agent/comp/metadata/resources/fx"
 	resourcesimpl "github.com/DataDog/datadog-agent/comp/metadata/resources/impl"
 	runner "github.com/DataDog/datadog-agent/comp/metadata/runner/def"
 	metadatarunnerfx "github.com/DataDog/datadog-agent/comp/metadata/runner/fx"
+	serverlessaas "github.com/DataDog/datadog-agent/comp/metadata/serverlessaas/def"
 	serverlessaasfx "github.com/DataDog/datadog-agent/comp/metadata/serverlessaas/fx"
 	logscompressionfx "github.com/DataDog/datadog-agent/comp/serializer/logscompression/fx"
 	metricscompressionfx "github.com/DataDog/datadog-agent/comp/serializer/metricscompression/fx"
@@ -171,9 +176,19 @@ func RunDogstatsdFct(cliParams *CLIParams, defaultConfPath string, defaultLogFil
 	)
 }
 
+// metadataComponents makes the selected providers explicit startup dependencies.
+// Registering their modules alone does not guarantee they are instantiated.
+type metadataComponents struct{}
+
 func metadataModules() fx.Option {
 	if os.Getenv("DD_SERVERLESS_AAS_EXTENSION_INVENTORY_ENABLED") == "1" {
-		return serverlessaasfx.Module()
+		return fx.Options(
+			serverlessaasfx.Module(),
+			metadatarunnerfx.Module(),
+			fx.Provide(func(_ serverlessaas.Component, _ runner.Component) metadataComponents {
+				return metadataComponents{}
+			}),
+		)
 	}
 	return fx.Options(
 		fx.Supply(resourcesimpl.Disabled()),
@@ -184,6 +199,9 @@ func metadataModules() fx.Option {
 		// sysprobeconfig is optionally required by inventoryagent.
 		sysprobeconfig.NoneModule(),
 		inventoryhostfx.Module(),
+		fx.Provide(func(_ resources.Component, _ host.Component, _ inventoryagent.Component, _ inventoryhost.Component, _ runner.Component) metadataComponents {
+			return metadataComponents{}
+		}),
 	)
 }
 
@@ -197,7 +215,7 @@ func start(
 	wmeta workloadmeta.Component,
 	_ tagger.Component,
 	demultiplexer demultiplexer.Component,
-	_ runner.Component,
+	_ metadataComponents,
 	_ healthprobe.Component,
 ) error {
 	// Main context passed to components

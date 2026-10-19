@@ -3,4 +3,6 @@ features:
   - |
     Adds ``DD_SERVERLESS_AAS_EXTENSION_INVENTORY_ENABLED`` (default ``false``)
     to opt the Azure App Services Extension into reporting cloud resource
-    inventory metadata to Datadog.
+    inventory metadata to Datadog. Reporting also requires the existing
+    ``enable_metadata_collection`` and ``inventories_enabled`` settings to be
+    enabled; the extension inventory flag does not override either setting.

@@ -8,16 +8,15 @@ package serverlessaasimpl
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/DataDog/datadog-agent/comp/core/config"
 	hostnameinterface "github.com/DataDog/datadog-agent/comp/core/hostname/hostnameinterface/def"
 	log "github.com/DataDog/datadog-agent/comp/core/log/def"
-	compdef "github.com/DataDog/datadog-agent/comp/def"
 	"github.com/DataDog/datadog-agent/comp/metadata/internal/util"
 	"github.com/DataDog/datadog-agent/comp/metadata/inventorypayload"
 	runnerdef "github.com/DataDog/datadog-agent/comp/metadata/runner/def"
@@ -34,15 +33,12 @@ const (
 
 	workloadTypeAzureAppService = "azure_app_service"
 	workloadTypeAzureFunction   = "azure_function"
-
-	// envInventoryEnabled gates AAS inventory reporting. Set it to "1" in the
-	// Function App / Web App app settings to enable inventory.
-	envInventoryEnabled = "DD_SERVERLESS_AAS_EXTENSION_INVENTORY_ENABLED"
 )
 
 type serverlessAASComp struct {
 	payload   util.InventoryPayload
 	data      *inventorypayload.Data
+	fields    map[string]interface{}
 	conf      config.Component
 	log       log.Component
 	hostname  hostnameinterface.Component
@@ -52,8 +48,6 @@ type serverlessAASComp struct {
 
 // Requires defines the dependencies for the AAS inventory component.
 type Requires struct {
-	compdef.In
-
 	Config     config.Component
 	Hostname   hostnameinterface.Component
 	Log        log.Component
@@ -62,8 +56,6 @@ type Requires struct {
 
 // Provides defines the output of the AAS inventory component.
 type Provides struct {
-	compdef.Out
-
 	Comp     serverlessaasdef.Component
 	Provider runnerdef.Provider
 }
@@ -76,16 +68,13 @@ func NewComponent(deps Requires) Provides {
 		log:      deps.Log,
 		hostname: deps.Hostname,
 		uuid:     uuid.New().String(),
+		fields:   buildFields(),
 	}
-	var metadataSerializer serializer.MetricSerializer
-	if deps.Serializer != nil {
-		metadataSerializer = submissionRecordingSerializer{
-			MetricSerializer: deps.Serializer,
-			onSubmitted:      c.recordSubmission,
-		}
+	metadataSerializer := submissionRecordingSerializer{
+		MetricSerializer: deps.Serializer,
+		onSubmitted:      c.recordSubmission,
 	}
-	c.payload = util.CreateInventoryPayload(immediateInventoryConfig{deps.Config}, deps.Log, metadataSerializer, c.getPayload, "agent.json")
-	c.payload.Enabled = c.payload.Enabled && isEnabled()
+	c.payload = util.CreateInventoryPayload(deps.Config, deps.Log, metadataSerializer, c.getPayload, "agent.json", util.WithFirstRunDelay(0))
 
 	return Provides{
 		Comp:     c,
@@ -93,26 +82,15 @@ func NewComponent(deps Requires) Provides {
 	}
 }
 
-// immediateInventoryConfig skips the host startup delay only for this provider.
-// The shared configuration and other metadata providers retain their settings.
-type immediateInventoryConfig struct{ config.Component }
-
-func (c immediateInventoryConfig) GetDuration(key string) time.Duration {
-	if key == "inventories_first_run_delay" {
-		return 0
-	}
-	return c.Component.GetDuration(key)
-}
-
-func isEnabled() bool {
-	return os.Getenv(envInventoryEnabled) == "1"
-}
-
+// InventoryPayload serializes collection and submission. The shared Data helper
+// is private to this provider, and each report gets its own field snapshot.
 func (c *serverlessAASComp) getPayload() marshaler.JSONMarshaler {
-	fields := buildFields(c.conf)
-	if fields == nil {
+	if c.fields == nil {
 		return nil
 	}
+	fields := maps.Clone(c.fields)
+	fields["dd_env"] = c.conf.GetString("env")
+	fields["dd_site"] = c.conf.GetString("site")
 	if c.submitted {
 		fields["report_reason"] = reportReasonPeriodic
 	}
@@ -139,9 +117,9 @@ func (s submissionRecordingSerializer) SendMetadata(payload marshaler.JSONMarsha
 	return nil
 }
 
-// buildFields snapshots the complete AAS field set. A nil result withholds the
+// buildFields snapshots the static AAS environment fields. A nil result withholds the
 // payload when the required REDAPL resource key cannot be derived.
-func buildFields(conf config.Component) map[string]interface{} {
+func buildFields() map[string]interface{} {
 	metadata := readAppServiceMetadata()
 	resourceID := canonicalResourceID(metadata.resourceID)
 	if resourceID == "" {
@@ -159,8 +137,6 @@ func buildFields(conf config.Component) map[string]interface{} {
 		"azure_resource_group":  metadata.resourceGroup,
 		"runtime":               metadata.runtime,
 		"extension_version":     metadata.extensionVersion,
-		"dd_env":                conf.GetString("env"),
-		"dd_site":               conf.GetString("site"),
 		"dd_service":            os.Getenv("DD_SERVICE"),
 		"dd_version":            os.Getenv("DD_VERSION"),
 	}
