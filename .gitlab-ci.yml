@@ -19,26 +19,28 @@ variables:
   PYTHONUNBUFFERED: "1"
   PYTHONDONTWRITEBYTECODE: "1"
 
-stages: [demo]
+stages: [retry, fix]
 
 forum_demo:retry:
-  stage: demo
+  stage: retry
   needs: []
   rules:
-    - if: '$CI_COMMIT_REF_NAME !~ /-fix$/'
+    - when: on_success
   script:
     - python3 .gitlab/forum-demo/flaky.py
 
 forum_demo:fix:
-  stage: demo
-  needs: []
+  stage: fix
+  needs:
+    - job: forum_demo:retry
+      artifacts: false
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /-fix$/'
+    - when: on_success
   script:
     - python3 .gitlab/forum-demo/check_duration.py
 
 forum_demo:optional:
-  stage: demo
+  stage: retry
   needs: []
   rules:
     - when: always
