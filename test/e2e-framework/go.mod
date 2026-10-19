@@ -15,13 +15,13 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
-	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.89.2
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.338.3
-	github.com/aws/aws-sdk-go-v2/service/ecr v1.66.3
-	github.com/aws/aws-sdk-go-v2/service/ecs v1.100.2
-	github.com/aws/aws-sdk-go-v2/service/eks v1.104.0
+	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.89.3
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.338.4
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.66.4
+	github.com/aws/aws-sdk-go-v2/service/ecs v1.100.3
+	github.com/aws/aws-sdk-go-v2/service/eks v1.104.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.3
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.79.2
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.79.3
 	github.com/aws/session-manager-plugin v0.0.0-20241119210807-82dc72922492
 	github.com/cenkalti/backoff/v7 v7.0.1
 	github.com/docker/cli v29.9.0+incompatible
@@ -31,7 +31,7 @@ require (
 	github.com/moby/moby/client v0.6.2
 	github.com/pkg/sftp v1.13.11
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.50.0
-	github.com/pulumi/pulumi-awsx/sdk/v3 v3.10.0
+	github.com/pulumi/pulumi-awsx/sdk/v3 v3.11.0
 	github.com/pulumi/pulumi-azure-native-sdk/authorization/v3 v3.28.0
 	github.com/pulumi/pulumi-azure-native-sdk/compute/v3 v3.28.0
 	github.com/pulumi/pulumi-azure-native-sdk/containerservice/v3 v3.28.0
